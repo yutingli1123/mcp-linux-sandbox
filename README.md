@@ -69,11 +69,12 @@ not happen:
 > same label for every call in the conversation. Never reuse a label from an
 > earlier conversation, and do not change it mid-conversation.
 
-Verify with:
+Verify with, from the install directory (`install.sh` copies `selftest.py` there):
 
 ```bash
+cd ~/mcp-linux-sandbox                      # or wherever SANDBOX_HOME points
 ./venv/bin/python selftest.py --url https://your.host:8443/mcp/<path>/ --token <token>
-./venv/bin/python selftest.py --url http://127.0.0.1:8000/mcp
+./venv/bin/python selftest.py --url http://127.0.0.1:8000/mcp    # bypasses nginx
 ```
 
 ## Sandbox labels

@@ -32,6 +32,7 @@ if [ "$SRC" != "$DST" ]; then
   install -m 644 "$SRC/Dockerfile" "$DST/Dockerfile"
   install -m 644 "$SRC/requirements.txt" "$DST/requirements.txt"
   install -m 755 "$SRC/env.sh" "$DST/env.sh"
+  install -m 755 "$SRC/selftest.py" "$DST/selftest.py"
   mkdir -p "$DST/scripts" "$DST/systemd" "$DST/nginx"
   install -m 755 "$SRC"/scripts/*.sh "$DST/scripts/"
   install -m 644 "$SRC"/systemd/* "$DST/systemd/"
