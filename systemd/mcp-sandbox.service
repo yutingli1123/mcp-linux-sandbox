@@ -1,0 +1,22 @@
+[Unit]
+Description=MCP Linux sandbox server
+After=network.target
+
+[Service]
+WorkingDirectory=%h/mcp-linux-sandbox
+ExecStart=%h/mcp-linux-sandbox/venv/bin/python %h/mcp-linux-sandbox/server.py
+ExecStop=%h/mcp-linux-sandbox/scripts/cleanup.sh
+# Without an explicit PATH the unit may not find podman:
+Environment=PATH=/usr/bin:/bin
+# Load MCP_PUBLIC_BASE, MCP_SIGN_KEY and any SANDBOX_* overrides from here:
+EnvironmentFile=-%h/mcp-linux-sandbox/mcp-sandbox.env
+# mixed = SIGTERM only to the main process, SIGKILL to the rest. Without it
+# systemd waits for conmon (which never exits on SIGTERM), times out, aborts,
+# and logs a conmon coredump on every restart.
+KillMode=mixed
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

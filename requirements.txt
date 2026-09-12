@@ -1,0 +1,4 @@
+# Pinned on purpose: re-running install.sh must not move a working deployment
+# onto a new fastmcp. Raise this line deliberately, then re-run install.sh and
+# selftest.py.
+fastmcp==4.0.3

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily garbage collection for MCP sandbox volumes
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

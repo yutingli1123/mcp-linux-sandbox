@@ -1,0 +1,7 @@
+[Unit]
+Description=Delete stale MCP sandbox volumes
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/mcp-linux-sandbox/mcp-sandbox.env
+ExecStart=%h/mcp-linux-sandbox/scripts/gc-volumes.sh
