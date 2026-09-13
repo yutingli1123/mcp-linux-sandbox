@@ -97,7 +97,7 @@ reuses a label reaches the old container — but every result echoes
 | `SANDBOX_MAX` | 2 | Concurrent containers. Beyond it the least-recently-used **idle** container is evicted (`rm -f`; the volume stays, so files survive); when every sandbox is mid-command the call is refused instead of killing one. On a 4-core / 3.66 GiB host, `2 × 1 GiB` leaves ~1.6 GiB for nginx, the server and the system. |
 | `SANDBOX_MAX_TIMEOUT` | 900 s | Ceiling on the model's `timeout_seconds`. |
 | `SANDBOX_MIN_FREE` | 2 GiB | Refuse to start a sandbox when the volume filesystem is nearly full. Checked at container creation only — it will not stop a single large write. |
-| `SANDBOX_LINK_TTL` | 3600 s | Download links are HMAC-signed with an expiry, so a leaked URL is bounded in time and scope. |
+| `SANDBOX_LINK_TTL` | 600 s | Download links are HMAC-signed with an expiry, so a leaked URL is bounded in time and scope. Long enough to click a link right after it is produced. |
 | `SANDBOX_IMAGE_MAX` / `SANDBOX_INLINE_MAX` | 1.5 MiB / 48 KiB | Attached images are also sent to the model (~2 MB ≈ 20k tokens); oversized files fall back to a link. |
 | `--memory=1g --cpus=2 --pids-limit=256` | | Verified to land in the cgroup (`memory.max`, `cpu.max`, `pids.max`). |
 | `--init` | | Without an init as PID 1, exited children pile up as zombies against `--pids-limit` until `exec` starts failing. |

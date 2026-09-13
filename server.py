@@ -38,7 +38,7 @@ VOLROOT = Path(os.environ.get(
 
 SIGN_KEY = os.environ.get("MCP_SIGN_KEY", "").encode()
 PUBLIC_BASE = os.environ.get("MCP_PUBLIC_BASE", "").rstrip("/")
-LINK_TTL = int(os.environ.get("SANDBOX_LINK_TTL", 3600))
+LINK_TTL = int(os.environ.get("SANDBOX_LINK_TTL", 600))
 
 IMAGE_MAX = int(os.environ.get("SANDBOX_IMAGE_MAX", 1536 * 1024))
 INLINE_MAX = int(os.environ.get("SANDBOX_INLINE_MAX", 48 * 1024))
