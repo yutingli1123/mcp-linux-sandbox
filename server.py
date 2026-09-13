@@ -6,6 +6,7 @@ model picks. See README.md for the reasoning and the known gotchas.
 """
 
 import asyncio
+import collections
 import hashlib
 import hmac
 import mimetypes
@@ -18,12 +19,8 @@ import time
 from pathlib import Path
 
 from fastmcp import FastMCP
+from fastmcp.utilities.types import Image
 from starlette.responses import JSONResponse, Response
-
-try:
-    from fastmcp import Image
-except ImportError:  # older fastmcp layouts
-    from fastmcp.utilities.types import Image
 
 # ---------------------------------------------------------------- configuration
 PODMAN = os.environ.get("SANDBOX_PODMAN", "/usr/bin/podman")
@@ -56,7 +53,7 @@ mcp = FastMCP("linux-sandbox")
 
 _lock = threading.Lock()
 _last: dict = {}
-_active: set = set()   # keys with a command in flight; the reaper leaves them alone
+_active = collections.Counter()   # in-flight calls per key; the reaper leaves those alone
 
 
 # ------------------------------------------------------------------- helpers
@@ -118,23 +115,38 @@ def _resolve(key, rel):
     return target if target.is_file() else None
 
 
-def _open_nofollow(path):
-    """Open a regular file for reading, refusing a symlink at the final path.
+def _open_beneath(key, rel):
+    """Open a regular file under the volume, refusing a symlink in every component.
 
-    _resolve() checks containment first, but the volume is writable by the
-    sandbox, so a path it approved can be swapped for a symlink before anyone
-    opens it. Doing the open and the regular-file check on one descriptor
-    removes that window, so read from the fd this returns rather than from the
-    path.
+    _resolve() checks containment first, but it checks at a moment: the volume
+    is writable by the sandbox, so any component of the path it approved can be
+    swapped for a symlink before the file is opened. O_NOFOLLOW alone only
+    guards the last component, so the walk starts at the volume root and
+    descends with no symlink followed at any level. Read from the fd this
+    returns, not from a path.
     """
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    root = _workspace(key)
+    parts = [p for p in str(rel).lstrip("/").split("/") if p not in ("", ".")]
+    if not parts:
+        raise OSError(f"empty path: {rel!r}")
+    if any(p == ".." for p in parts):
+        raise OSError(f"path escape: {rel!r}")
+
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise OSError(f"not a regular file: {path}")
-    except BaseException:
+        for part in parts[:-1]:
+            nfd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                          dir_fd=fd)
+            os.close(fd)
+            fd = nfd
+        leaf = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+    finally:
         os.close(fd)
-        raise
-    return fd
+
+    if not stat.S_ISREG(os.fstat(leaf).st_mode):
+        os.close(leaf)
+        raise OSError(f"not a regular file: {rel}")
+    return leaf
 
 
 def _mime(path):
@@ -176,7 +188,7 @@ def _reap():
             with _lock:
                 # Re-check under the lock: a call can start while we iterate,
                 # and a call that is still running must not be reaped.
-                if key in _active or now - _last.get(key, now) < IDLE:
+                if _active.get(key, 0) > 0 or now - _last.get(key, now) < IDLE:
                     continue
                 name, _ = _names(key)
                 if _p("container", "exists", name).returncode == 0:
@@ -230,9 +242,10 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
             if r.returncode != 0:
                 return f"[sandbox error] could not start container: {r.stderr.strip()}"
             created = True
-        # Held for the whole exec: a command allowed to outlive IDLE must not
-        # be reaped out from under itself.
-        _active.add(key)
+        # Counted, not flagged: two calls can share a key, and the first one to
+        # finish must not unmask the other, which would let the reaper kill a
+        # command that is still running.
+        _active[key] += 1
         _last[key] = time.time()
 
     try:
@@ -243,8 +256,11 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
     except subprocess.TimeoutExpired:
         return f"[timed out after {timeout_seconds}s; the process was killed]"
     finally:
-        _active.discard(key)
-        _last[key] = time.time()
+        with _lock:
+            _active[key] -= 1
+            if _active[key] <= 0:
+                del _active[key]
+            _last[key] = time.time()
 
     out = (r.stdout + r.stderr).strip()
     if len(out) > 20000:
@@ -278,7 +294,7 @@ def present_file(sandbox: str, path: str, caption: str = ""):
 
     if ext.lstrip(".") in IMAGE_FORMATS and size <= IMAGE_MAX:
         try:
-            with os.fdopen(_open_nofollow(f), "rb") as fh:
+            with os.fdopen(_open_beneath(key, path), "rb") as fh:
                 blob = fh.read(IMAGE_MAX + 1)
         except OSError as e:
             return f"{info}\n[image attach failed: {e}]\n{_link(key, f)}"
@@ -293,10 +309,12 @@ def present_file(sandbox: str, path: str, caption: str = ""):
 
     if size <= INLINE_MAX and ext in TEXT_EXT:
         try:
-            with os.fdopen(_open_nofollow(f), "r", errors="replace") as fh:
+            with os.fdopen(_open_beneath(key, path), "r", errors="replace") as fh:
                 body = fh.read(INLINE_MAX + 1)
         except OSError as e:
-            return f"{info}\n[read failed: {e}]"
+            url = _link(key, f)
+            return (f"{info}\n[read failed: {e}]" +
+                    (f"\nopen in browser: {url}" if url else ""))
         # Read bounded and re-checked: the file can grow between the stat above
         # and this read, and an oversized one falls through to the link.
         if len(body) <= INLINE_MAX:
@@ -375,7 +393,7 @@ async def _download(request):
     if f is None:
         return JSONResponse({"detail": "not found"}, status_code=404)
     try:
-        fd = _open_nofollow(f)
+        fd = _open_beneath(p["key"], p["name"])
     except OSError:
         return JSONResponse({"detail": "not found"}, status_code=404)
     return _DownloadResponse(fd, os.fstat(fd).st_size, _mime(f))

@@ -61,10 +61,11 @@ say "python venv"
 "$DST/venv/bin/python" -c "import fastmcp; print('fastmcp', getattr(fastmcp,'__version__','?'))"
 
 say "base image"
-$PODMAN image exists "$($PODMAN images --format '{{.Repository}}:{{.Tag}}' \
-  | grep -m1 sandbox-base:latest || echo localhost/sandbox-base:latest)" \
-  && echo "image already present (rebuild with: $PODMAN build -t localhost/sandbox-base:latest $DST)" \
-  || $PODMAN build -t localhost/sandbox-base:latest "$DST"
+if $PODMAN image exists localhost/sandbox-base:latest; then
+  echo "image already present (rebuild with: $PODMAN build -t localhost/sandbox-base:latest $DST)"
+else
+  $PODMAN build -t localhost/sandbox-base:latest "$DST"
+fi
 
 say "systemd user units"
 mkdir -p "$UNITDIR"

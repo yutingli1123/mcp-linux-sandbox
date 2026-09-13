@@ -116,6 +116,9 @@ This endpoint executes arbitrary commands. Treat it accordingly.
 * Anything that can reach `/mcp/` can run code; anything that can reach `/dl/`
   can read the sandbox volume. Keep the bearer token and `MCP_SIGN_KEY` out of
   URLs, screenshots, `.fdmcp`-style exports, cloud drives and git.
+* `present_file` serves regular files under `/workspace` and follows no symlink
+  in any path component, so a link created inside the sandbox cannot reach host
+  files.
 * Containers are **rootless** (`podman`, no `sudo`) and can reach the LAN by
   default. If that matters, drop the network (`--network=none`) or move the
   container onto an `--internal` network behind a proxy — but installing packages
@@ -134,10 +137,6 @@ This endpoint executes arbitrary commands. Treat it accordingly.
   other clients may not.
 * `gc-volumes.sh`'s age heuristic (newest mtime in the volume) has not been
   validated on btrfs. Keep `DRY_RUN=1` until you have watched it for a while.
-* fastmcp is pinned in `requirements.txt`. On that version `Image` is not
-  exported at the top level, so the fallback import in `server.py`
-  (`fastmcp.utilities.types`) is the one that runs — it is load-bearing, not a
-  compatibility nicety.
 
 ## Verified behaviour
 
