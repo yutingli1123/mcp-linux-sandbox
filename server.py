@@ -313,8 +313,8 @@ def present_file(sandbox: str, path: str, caption: str = ""):
                 blob = fh.read(IMAGE_MAX + 1)
         except (OSError, ValueError) as e:
             return f"{info}\n[image attach failed: {e}]\n{_link(key, f)}"
-        # Bounded like the text branch, and handed over as bytes: Image(path=)
-        # would open the file itself, later, on a path the sandbox can swap.
+        # Bounded like the text branch, and handed over as bytes so the fd
+        # opened and verified above is the only time this file is read.
         if len(blob) <= IMAGE_MAX:
             try:
                 fmt = "jpeg" if ext == ".jpg" else ext.lstrip(".")
