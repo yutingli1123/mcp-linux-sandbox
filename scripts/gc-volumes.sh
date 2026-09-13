@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Delete sandbox volumes that have not been touched for MAX_AGE_DAYS.
 #
-# Runs in dry-run mode by default. Leave DRY_RUN=1 for at least a week so you can
-# confirm the age heuristic behaves on your filesystem before letting it delete.
+# Deletes by default. DRY_RUN=1 prints what it would delete instead.
 #
 # NEVER use `podman volume prune` instead of this: sandbox containers are
 # recycled on purpose, so "not in use" is the normal state and prune would wipe
@@ -13,7 +12,7 @@ PODMAN="${SANDBOX_PODMAN:-/usr/bin/podman}"
 VOLROOT="${SANDBOX_VOLROOT:-$HOME/.local/share/containers/storage/volumes}"
 NAME_PREFIX="mcpsb-vol-"
 MAX_AGE_DAYS="${MAX_AGE_DAYS:-7}"
-DRY_RUN="${DRY_RUN:-1}"
+DRY_RUN="${DRY_RUN:-0}"
 
 # An age of 0 or a non-number would match every volume below.
 if ! [ "$MAX_AGE_DAYS" -ge 1 ] 2>/dev/null; then

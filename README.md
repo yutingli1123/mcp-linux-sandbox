@@ -32,7 +32,7 @@ MCP client ──Bearer──▶ nginx (TLS)
 | `install.sh` | Idempotent install/update: venv, image, systemd units |
 | `selftest.py` | End-to-end checks that speak MCP over HTTP |
 | `scripts/cleanup.sh` | Stops leftover containers on service stop |
-| `scripts/gc-volumes.sh` | Deletes stale volumes (dry-run by default) |
+| `scripts/gc-volumes.sh` | Deletes volumes untouched for `MAX_AGE_DAYS` |
 | `systemd/` | `mcp-sandbox.service`, plus the volume-GC service and timer |
 | `nginx/mcp-sandbox.conf` | The two `location` blocks to paste into your server |
 | `mcp-sandbox.env.example` | Copy to `mcp-sandbox.env`; holds the signing key |
@@ -104,8 +104,9 @@ reuses a label reaches the old container — but every result echoes
 | `bash -lc` | | `/bin/sh` is dash on Debian: no `[[ ]]`, no arrays, no `pipefail`. |
 | `--security-opt=no-new-privileges` | | Keeps setuid binaries from being exploitable. |
 
-Volumes are never deleted by the server. `gc-volumes.sh` handles that on a timer
-and is dry-run by default.
+Volumes are never deleted by the server. `gc-volumes.sh` deletes them on a daily
+timer once nothing in them has been touched for `MAX_AGE_DAYS` (7 days);
+`DRY_RUN=1` prints what it would delete instead.
 
 ## Security
 
@@ -137,7 +138,7 @@ This endpoint executes arbitrary commands. Treat it accordingly.
 * Image attachments depend on the client. FlowDown attaches MCP `image` content;
   other clients may not.
 * `gc-volumes.sh`'s age heuristic (newest mtime in the volume) has not been
-  validated on btrfs. Keep `DRY_RUN=1` until you have watched it for a while.
+  validated on btrfs.
 
 ## Verified behaviour
 
