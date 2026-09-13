@@ -14,6 +14,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -108,7 +109,7 @@ def _resolve(key, rel):
     try:
         root = base.resolve()
         target = (base / str(rel).lstrip("/")).resolve()
-    except OSError:
+    except (OSError, ValueError):   # ValueError: an embedded NUL in the path
         return None
     if target != root and root not in target.parents:
         return None
@@ -183,19 +184,24 @@ def _create(key):
 def _reap():
     while True:
         time.sleep(60)
-        now = time.time()
-        for key in list(_last):
-            if now - _last.get(key, now) < IDLE:
-                continue
-            with _lock:
-                # Re-check under the lock: a call can start while we iterate,
-                # and a call that is still running must not be reaped.
-                if _active.get(key, 0) > 0 or now - _last.get(key, now) < IDLE:
+        try:
+            now = time.time()
+            for key in list(_last):
+                if now - _last.get(key, now) < IDLE:
                     continue
-                name, _ = _names(key)
-                if _p("container", "exists", name).returncode == 0:
-                    _p("rm", "-f", name)
-                _last.pop(key, None)
+                with _lock:
+                    # Re-check under the lock: a call can start while we iterate,
+                    # and a call that is still running must not be reaped.
+                    if _active.get(key, 0) > 0 or now - _last.get(key, now) < IDLE:
+                        continue
+                    name, _ = _names(key)
+                    if _p("container", "exists", name).returncode == 0:
+                        _p("rm", "-f", name)
+                    _last.pop(key, None)
+        except Exception as e:
+            # This thread is the only thing recycling containers, so a podman
+            # call that times out must not end the loop.
+            print(f"reaper: {e!r}", file=sys.stderr, flush=True)
 
 
 def _seed():
@@ -237,7 +243,14 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
                 return "[sandbox error] host disk almost full, refusing to start a sandbox"
             keys = _existing_keys()
             if len(keys) >= MAX_SANDBOXES:
-                victim = min(keys, key=lambda k: _last.get(k, 0.0))
+                # Only idle containers are candidates: _last is stamped when a
+                # call starts, so a sandbox running a long command looks like
+                # the oldest one and would be killed mid-command.
+                idle = [k for k in keys if not _active.get(k, 0)]
+                if not idle:
+                    return (f"[sandbox error] all {len(keys)} sandboxes are in "
+                            f"use; try again when one is free")
+                victim = min(idle, key=lambda k: _last.get(k, 0.0))
                 _p("rm", "-f", _names(victim)[0])
                 _last.pop(victim, None)
             r = _create(key)
@@ -298,7 +311,7 @@ def present_file(sandbox: str, path: str, caption: str = ""):
         try:
             with os.fdopen(_open_beneath(key, path), "rb") as fh:
                 blob = fh.read(IMAGE_MAX + 1)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             return f"{info}\n[image attach failed: {e}]\n{_link(key, f)}"
         # Bounded like the text branch, and handed over as bytes: Image(path=)
         # would open the file itself, later, on a path the sandbox can swap.
@@ -313,7 +326,7 @@ def present_file(sandbox: str, path: str, caption: str = ""):
         try:
             with os.fdopen(_open_beneath(key, path), "r", errors="replace") as fh:
                 body = fh.read(INLINE_MAX + 1)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             url = _link(key, f)
             return (f"{info}\n[read failed: {e}]" +
                     (f"\nopen in browser: {url}" if url else ""))
@@ -338,8 +351,10 @@ def sandbox_info() -> str:
     try:
         from fastmcp.server.dependencies import get_http_headers
         raw = get_http_headers(include_all=True) or {}
+        # Anything credential-shaped: this output goes into the conversation,
+        # and the sandbox has network access.
         hdrs = str({k: ("<redacted>"
-                        if k.lower() in ("authorization", "proxy-authorization")
+                        if re.search(r"auth|cookie|key|secret|token", k, re.I)
                         else v)
                     for k, v in raw.items()})
     except Exception as e:
@@ -396,13 +411,19 @@ async def _download(request):
         return JSONResponse({"detail": "not found"}, status_code=404)
     try:
         fd = _open_beneath(p["key"], p["name"])
-    except OSError:
+    except (OSError, ValueError):
         return JSONResponse({"detail": "not found"}, status_code=404)
     return _DownloadResponse(fd, os.fstat(fd).st_size, _mime(f))
 
 
 threading.Thread(target=_reap, daemon=True).start()
-_seed()
+
+try:
+    _seed()
+except Exception as e:
+    # Nothing works without podman, so exit with the reason rather than a bare
+    # traceback: systemd restarts on failure and the message lands in the journal.
+    raise SystemExit(f"cannot list existing sandboxes: {e} — is {PODMAN} usable?")
 
 if __name__ == "__main__":
     mcp.run(transport="streamable-http", host=HOST, port=PORT)

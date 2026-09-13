@@ -15,6 +15,12 @@ NAME_PREFIX="mcpsb-vol-"
 MAX_AGE_DAYS="${MAX_AGE_DAYS:-7}"
 DRY_RUN="${DRY_RUN:-1}"
 
+# An age of 0 or a non-number would match every volume below.
+if ! [ "$MAX_AGE_DAYS" -ge 1 ] 2>/dev/null; then
+  echo "MAX_AGE_DAYS must be a positive integer (got '$MAX_AGE_DAYS')" >&2
+  exit 1
+fi
+
 now=$(date +%s)
 shopt -s nullglob
 
@@ -23,8 +29,13 @@ for dir in "$VOLROOT/${NAME_PREFIX}"*; do
   found=1
   name=$(basename "$dir")
 
-  if [ -n "$($PODMAN ps -a --filter "volume=${name}" \
-        --format '{{.Names}}' 2>/dev/null | head -1)" ]; then
+  # A failed `podman ps` must not read as "no container uses this volume".
+  users=$($PODMAN ps -a --filter "volume=${name}" --format '{{.Names}}' 2>/dev/null)
+  if [ $? -ne 0 ]; then
+    echo "keep   (ps failed)  ${name}"
+    continue
+  fi
+  if [ -n "$users" ]; then
     echo "keep   (in use)     ${name}"
     continue
   fi

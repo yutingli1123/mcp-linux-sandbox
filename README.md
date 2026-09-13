@@ -94,7 +94,7 @@ reuses a label reaches the old container — but every result echoes
 | Setting | Default | Effect |
 |---|---|---|
 | `SANDBOX_IDLE` | 300 s | Recycle idle containers. Cleanup only: lowering it loses `apt` packages sooner, nothing else. |
-| `SANDBOX_MAX` | 2 | Concurrent containers. Beyond it the least-recently-used is evicted (`rm -f`; the volume stays, so files survive). On a 4-core / 3.66 GiB host, `2 × 1 GiB` leaves ~1.6 GiB for nginx, the server and the system. |
+| `SANDBOX_MAX` | 2 | Concurrent containers. Beyond it the least-recently-used **idle** container is evicted (`rm -f`; the volume stays, so files survive); when every sandbox is mid-command the call is refused instead of killing one. On a 4-core / 3.66 GiB host, `2 × 1 GiB` leaves ~1.6 GiB for nginx, the server and the system. |
 | `SANDBOX_MAX_TIMEOUT` | 900 s | Ceiling on the model's `timeout_seconds`. |
 | `SANDBOX_MIN_FREE` | 2 GiB | Refuse to start a sandbox when the volume filesystem is nearly full. Checked at container creation only — it will not stop a single large write. |
 | `SANDBOX_LINK_TTL` | 3600 s | Download links are HMAC-signed with an expiry, so a leaked URL is bounded in time and scope. |
@@ -130,7 +130,8 @@ This endpoint executes arbitrary commands. Treat it accordingly.
 
 * The sandbox boundary is the model's own label discipline, as described above.
 * Concurrent conversations share the container budget. With `SANDBOX_MAX=2`, a
-  third conversation evicts the LRU container — packages go, files stay.
+  third conversation evicts the least-recently-used idle container — packages
+  go, files stay. If both are mid-command it is refused and has to retry.
 * Restarting the service invalidates the client's MCP session; the client has to
   re-verify.
 * Image attachments depend on the client. FlowDown attaches MCP `image` content;

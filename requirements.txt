@@ -1,4 +1,5 @@
 # Pinned on purpose: re-running install.sh must not move a working deployment
-# onto a new fastmcp. Raise this line deliberately, then re-run install.sh and
+# onto a new fastmcp. Its transitive dependencies are still resolved fresh on
+# every install. Raise this line deliberately, then re-run install.sh and
 # selftest.py.
 fastmcp==4.0.3

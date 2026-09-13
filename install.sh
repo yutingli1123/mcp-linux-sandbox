@@ -33,6 +33,7 @@ if [ "$SRC" != "$DST" ]; then
   install -m 644 "$SRC/requirements.txt" "$DST/requirements.txt"
   install -m 755 "$SRC/env.sh" "$DST/env.sh"
   install -m 755 "$SRC/selftest.py" "$DST/selftest.py"
+  install -m 644 "$SRC/.containerignore" "$DST/.containerignore"
   mkdir -p "$DST/scripts" "$DST/systemd" "$DST/nginx"
   install -m 755 "$SRC"/scripts/*.sh "$DST/scripts/"
   install -m 644 "$SRC"/systemd/* "$DST/systemd/"
@@ -55,6 +56,12 @@ fi
 echo "using $DST/mcp-sandbox.env"
 
 say "python venv"
+# An existing venv stops working when the system Python is upgraded, and
+# nothing below this line can repair it from the inside.
+if [ -d "$DST/venv" ] && ! "$DST/venv/bin/python" -c 'import sys' 2>/dev/null; then
+  echo "existing venv does not run (interpreter upgraded?); recreating"
+  rm -rf "$DST/venv"
+fi
 [ -d "$DST/venv" ] || python3 -m venv "$DST/venv"
 "$DST/venv/bin/pip" install --quiet --upgrade pip
 "$DST/venv/bin/pip" install --quiet -r "$DST/requirements.txt"
@@ -90,6 +97,16 @@ systemctl --user enable --now mcp-volumes-gc.timer
 systemctl --user restart mcp-sandbox
 
 say "status"
+# `restart` returns as soon as the process is spawned, so a server that dies
+# during startup (a malformed value in the env file, the port already in use)
+# would otherwise be reported as a successful install.
+sleep 2
+if ! systemctl --user is-active --quiet mcp-sandbox; then
+  echo "mcp-sandbox is not running:"
+  systemctl --user --no-pager --lines=20 status mcp-sandbox || true
+  journalctl --user -u mcp-sandbox -n 30 --no-pager || true
+  exit 1
+fi
 systemctl --user --no-pager --lines=0 status mcp-sandbox || true
 echo
 echo "next:"

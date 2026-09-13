@@ -1,0 +1,5 @@
+# The build context is the install directory, and the build only needs the
+# Dockerfile. Keep the venv and the signing key out of it.
+venv/
+mcp-sandbox.env
+__pycache__/

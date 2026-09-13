@@ -7,6 +7,6 @@ PODMAN="${SANDBOX_PODMAN:-/usr/bin/podman}"
 names=$($PODMAN ps -a --filter name=mcpsb- --format '{{.Names}}' 2>/dev/null)
 if [ -n "$names" ]; then
   # shellcheck disable=SC2086
-  $PODMAN rm -f $names >/dev/null 2>&1
+  $PODMAN rm -f $names >/dev/null || echo "cleanup: could not remove: $names" >&2
 fi
 exit 0
