@@ -161,7 +161,9 @@ def _sign(exp, key, rel):
 def _link(key, f):
     if not (PUBLIC_BASE and SIGN_KEY):
         return ""
-    rel = str(f.relative_to(_workspace(key)))
+    # Both sides resolved: f comes back canonical from _resolve(), and a
+    # symlinked component in VOLROOT would otherwise make the two disagree.
+    rel = str(f.relative_to(_workspace(key).resolve()))
     exp = int(time.time()) + LINK_TTL
     return f"{PUBLIC_BASE}/dl/{exp}/{_sign(exp, key, rel)}/{key}/{rel}"
 
