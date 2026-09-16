@@ -10,6 +10,7 @@ not just the Python code.
 
 import argparse
 import json
+import re
 import ssl
 import sys
 import urllib.error
@@ -76,6 +77,13 @@ class Client:
             else:
                 parts.append(f"<{c.get('type')}>")
         return res["result"], "\n".join(parts)
+
+    def fetch(self, url):
+        """GET a present_file link the way a browser would: no bearer token."""
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=self.timeout,
+                                    context=self.ctx) as r:
+            return r.read()
 
 
 def main():
@@ -145,6 +153,31 @@ def main():
 
     _, out8 = c.tool("present_file", {"sandbox": a.label_a, "path": "nope.txt"})
     record("present_file reports missing files", "present error" in out8)
+
+    # A script is a file, not something to paste into the conversation.
+    c.tool("run_command", {
+        "sandbox": a.label_a,
+        "command": "printf '#!/bin/sh\\necho probe\\n'"
+                   " > /workspace/selftest-probe.sh"})
+    _, out9 = c.tool("present_file", {"sandbox": a.label_a,
+                                      "path": "selftest-probe.sh"})
+    record("present_file does not inline text files",
+           "```" not in out9 and "/dl/" in out9,
+           out9.strip().splitlines()[-1][:70])
+
+    m = re.search(r"https?://\S+", out9)
+    if not m:
+        record("the link serves the file back", False, "no URL in the result")
+    else:
+        try:
+            body = c.fetch(m.group(0)).decode("utf-8", "replace")
+            record("the link serves the file back", "echo probe" in body,
+                   body.strip()[:60])
+        except urllib.error.HTTPError as e:
+            record("the link serves the file back", False, f"HTTP {e.code}")
+        except Exception as e:
+            # PUBLIC_BASE can point at a host this machine cannot reach.
+            print(f"[skip] the link serves the file back  -- unreachable: {e}")
 
     print()
     bad = [r for r in results if r[0] == FAIL]

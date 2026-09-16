@@ -41,11 +41,7 @@ PUBLIC_BASE = os.environ.get("MCP_PUBLIC_BASE", "").rstrip("/")
 LINK_TTL = int(os.environ.get("SANDBOX_LINK_TTL", 600))
 
 IMAGE_MAX = int(os.environ.get("SANDBOX_IMAGE_MAX", 1536 * 1024))
-INLINE_MAX = int(os.environ.get("SANDBOX_INLINE_MAX", 48 * 1024))
 IMAGE_FORMATS = {"png", "jpeg", "jpg", "gif", "webp", "bmp"}
-TEXT_EXT = {".txt", ".md", ".markdown", ".json", ".csv", ".tsv", ".log",
-            ".py", ".sh", ".c", ".js", ".ts", ".css", ".yml", ".yaml",
-            ".toml", ".ini", ".conf", ".sql", ".patch", ".diff"}
 
 HOST = os.environ.get("SANDBOX_HOST", "127.0.0.1")
 PORT = int(os.environ.get("SANDBOX_PORT", 8000))
@@ -286,12 +282,15 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
 
 @mcp.tool
 def present_file(sandbox: str, path: str, caption: str = ""):
-    """Show a file from the sandbox's /workspace to the user.
+    """Hand a file from the sandbox's /workspace to the user.
 
-    Use this instead of cat when the user should actually look at the file:
-    plots, screenshots, diagrams, rendered pages, reports you just produced.
-    Images are attached so both the user and you can see them. Small text files
-    are inlined. Anything else returns a link the user opens in a browser.
+    This delivers the file, it does not read it back to you: images are attached
+    so you and the user can both see them, and every other file comes back as a
+    link the user opens in a browser. To read a file's contents yourself use
+    run_command (`cat`, `head`, ...) — do not call this for that.
+
+    Use it when the user should actually get the file: plots, screenshots,
+    diagrams, rendered pages, scripts, reports you just produced.
 
     `path` is relative to /workspace (e.g. "out/chart.png"). `caption` is an
     optional single line shown above the file. Only files under /workspace can
@@ -313,8 +312,8 @@ def present_file(sandbox: str, path: str, caption: str = ""):
                 blob = fh.read(IMAGE_MAX + 1)
         except (OSError, ValueError) as e:
             return f"{info}\n[image attach failed: {e}]\n{_link(key, f)}"
-        # Bounded like the text branch, and handed over as bytes so the fd
-        # opened and verified above is the only time this file is read.
+        # Bounded read, one byte past the limit, and handed over as bytes so the
+        # fd opened and verified above is the only time this file is read.
         if len(blob) <= IMAGE_MAX:
             try:
                 fmt = "jpeg" if ext == ".jpg" else ext.lstrip(".")
@@ -322,23 +321,11 @@ def present_file(sandbox: str, path: str, caption: str = ""):
             except Exception as e:
                 return f"{info}\n[image attach failed: {e}]\n{_link(key, f)}"
 
-    if size <= INLINE_MAX and ext in TEXT_EXT:
-        try:
-            with os.fdopen(_open_beneath(key, path), "r", errors="replace") as fh:
-                body = fh.read(INLINE_MAX + 1)
-        except (OSError, ValueError) as e:
-            url = _link(key, f)
-            return (f"{info}\n[read failed: {e}]" +
-                    (f"\nopen in browser: {url}" if url else ""))
-        # Read bounded and re-checked: the file can grow between the stat above
-        # and this read, and an oversized one falls through to the link.
-        if len(body) <= INLINE_MAX:
-            return f"{info}\n```{ext.lstrip('.')}\n{body}\n```"
-
+    # Every non-image is delivered as a file: a link, never the contents.
     url = _link(key, f)
     if url:
         return f"{info}\nopen in browser (valid {LINK_TTL // 60} min): {url}"
-    return (f"{info}\n[no preview or link available for this type]\n"
+    return (f"{info}\n[no link available]\n"
             f"set MCP_SIGN_KEY and MCP_PUBLIC_BASE to enable links")
 
 

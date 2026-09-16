@@ -98,7 +98,7 @@ reuses a label reaches the old container — but every result echoes
 | `SANDBOX_MAX_TIMEOUT` | 900 s | Ceiling on the model's `timeout_seconds`. |
 | `SANDBOX_MIN_FREE` | 2 GiB | Refuse to start a sandbox when the volume filesystem is nearly full. Checked at container creation only — it will not stop a single large write. |
 | `SANDBOX_LINK_TTL` | 600 s | Download links are HMAC-signed with an expiry, so a leaked URL is bounded in time and scope. Long enough to click a link right after it is produced. |
-| `SANDBOX_IMAGE_MAX` / `SANDBOX_INLINE_MAX` | 1.5 MiB / 48 KiB | Attached images are also sent to the model (~2 MB ≈ 20k tokens); oversized files fall back to a link. |
+| `SANDBOX_IMAGE_MAX` | 1.5 MiB | Largest image that gets attached rather than linked. An attachment is also sent to the model (~2 MB ≈ 20k tokens). |
 | `--memory=1g --cpus=2 --pids-limit=256` | | Verified to land in the cgroup (`memory.max`, `cpu.max`, `pids.max`). |
 | `--init` | | Without an init as PID 1, exited children pile up as zombies against `--pids-limit` until `exec` starts failing. |
 | `bash -lc` | | `/bin/sh` is dash on Debian: no `[[ ]]`, no arrays, no `pipefail`. |
@@ -160,7 +160,7 @@ rootless podman, cgroup v2, behind nginx):
 | `--init` as PID 1 | ✅ `podman-init`, 0 zombies |
 | cgroup limits applied | ✅ `memory.max=1G`, `cpu.max=2 cores`, `pids.max=256` |
 | `present_file` image | ✅ rendered as an attachment |
-| `present_file` text / link | ✅ inlined / signed URL |
+| `present_file` text file | ✅ signed URL, never inlined |
 | Path traversal | ✅ rejected |
 | Symlink escape | ✅ rejected |
 | Oversized image | ✅ falls back to a link |
