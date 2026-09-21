@@ -224,8 +224,9 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
 
     Put anything the user should keep or look at under /workspace, then use
     present_file to show it. Write commands in bash syntax. Commands are killed
-    after `timeout_seconds`; the server clamps large values. Output is truncated
-    past 20k characters and the exit code is prefixed to the result.
+    after `timeout_seconds`, which may be up to 900 seconds; for something slow,
+    pass a large value rather than polling with sleep. Output is truncated past
+    20k characters and the exit code is prefixed to the result.
     """
     timeout_seconds = max(1, min(int(timeout_seconds), MAX_TIMEOUT))
     key = _key(sandbox)
