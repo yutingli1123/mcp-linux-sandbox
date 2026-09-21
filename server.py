@@ -259,10 +259,13 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
         _last[key] = time.time()
 
     try:
+        # Merged at the pipe so the order survives: cargo, make and pip write
+        # progress to stderr and results to stdout.
         r = subprocess.run(
             [PODMAN, "exec", "-i", name, "timeout", "-k", "5",
              str(timeout_seconds), "bash", "-lc", command],
-            capture_output=True, text=True, timeout=timeout_seconds + 20)
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=timeout_seconds + 20)
     except subprocess.TimeoutExpired:
         return f"[timed out after {timeout_seconds}s; the process was killed]"
     finally:
@@ -272,7 +275,7 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
                 del _active[key]
             _last[key] = time.time()
 
-    out = (r.stdout + r.stderr).strip()
+    out = r.stdout.strip()
     if len(out) > 20000:
         out = out[:10000] + "\n...[truncated]...\n" + out[-5000:]
     head = f"[sandbox {key}]{' [new]' if created else ''} [exit {r.returncode}]"
