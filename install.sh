@@ -68,10 +68,10 @@ fi
 "$DST/venv/bin/python" -c "import fastmcp; print('fastmcp', getattr(fastmcp,'__version__','?'))"
 
 say "base image"
-if $PODMAN image exists localhost/sandbox-base:latest; then
-  echo "image already present (rebuild with: $PODMAN build -t localhost/sandbox-base:latest $DST)"
+if $PODMAN image exists localhost/sandbox-base:fedora44; then
+  echo "image already present (rebuild with: $PODMAN build -t localhost/sandbox-base:fedora44 $DST)"
 else
-  $PODMAN build -t localhost/sandbox-base:latest "$DST"
+  $PODMAN build -t localhost/sandbox-base:fedora44 "$DST"
 fi
 
 say "systemd user units"

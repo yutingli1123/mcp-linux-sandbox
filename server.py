@@ -1,7 +1,7 @@
 """MCP server: a disposable Linux sandbox, one per conversation.
 
 FlowDown (or any MCP client speaking Streamable HTTP) connects over HTTP; each
-tool call runs `podman exec` inside a Debian container identified by a label the
+tool call runs `podman exec` inside a Fedora container identified by a label the
 model picks. See README.md for the reasoning and the known gotchas.
 """
 
@@ -25,7 +25,7 @@ from starlette.responses import JSONResponse, Response
 
 # ---------------------------------------------------------------- configuration
 PODMAN = os.environ.get("SANDBOX_PODMAN", "/usr/bin/podman")
-BASE_IMAGE = os.environ.get("SANDBOX_IMAGE", "localhost/sandbox-base:latest")
+BASE_IMAGE = os.environ.get("SANDBOX_IMAGE", "localhost/sandbox-base:fedora44")
 
 IDLE = int(os.environ.get("SANDBOX_IDLE", 5 * 60))          # recycle idle containers
 MAX_SANDBOXES = int(os.environ.get("SANDBOX_MAX", 2))       # concurrent containers
@@ -209,7 +209,7 @@ def _seed():
 # ---------------------------------------------------------------------- tools
 @mcp.tool
 def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
-    """Run a bash command inside a sandboxed Debian Linux container.
+    """Run a bash command inside a sandboxed Fedora Linux container.
 
     `sandbox` is the name of the sandbox to use. Each conversation gets its own
     sandbox: when a new conversation starts, pick a NEW short label (for example
@@ -219,14 +219,13 @@ def run_command(sandbox: str, command: str, timeout_seconds: int = 120) -> str:
 
     A label that has no container yet gets a fresh, empty one; do not create a
     sandbox in advance. Files under /workspace persist while that label is in
-    use. Packages installed with apt and running processes live in the container
+    use. Packages installed with dnf and running processes live in the container
     and are lost when it is recycled after being idle.
 
     Put anything the user should keep or look at under /workspace, then use
-    present_file to show it. Write commands in bash syntax; `fd` is `fdfind`
-    here. Commands are killed after `timeout_seconds`; the server clamps large
-    values. Output is truncated past 20k characters and the exit code is
-    prefixed to the result.
+    present_file to show it. Write commands in bash syntax. Commands are killed
+    after `timeout_seconds`; the server clamps large values. Output is truncated
+    past 20k characters and the exit code is prefixed to the result.
     """
     timeout_seconds = max(1, min(int(timeout_seconds), MAX_TIMEOUT))
     key = _key(sandbox)

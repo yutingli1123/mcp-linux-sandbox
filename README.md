@@ -1,8 +1,8 @@
 # mcp-linux-sandbox
 
-A disposable Debian Linux sandbox exposed as an MCP server, so a chat client
+A disposable Fedora Linux sandbox exposed as an MCP server, so a chat client
 (FlowDown, Claude Desktop, anything speaking Streamable HTTP) can run real shell
-commands — `apt install`, `curl`, `ffmpeg`, Python — and hand files back to you.
+commands — `dnf install`, `curl`, `ffmpeg`, Python — and hand files back to you.
 
 Each conversation gets its own container. Files under `/workspace` survive
 container recycling; installed packages and running processes do not.
@@ -26,7 +26,7 @@ MCP client ──Bearer──▶ nginx (TLS)
 | Path | What it is |
 |---|---|
 | `server.py` | The MCP server: `run_command`, `present_file`, `sandbox_info`, plus the `/dl/` route |
-| `Dockerfile` | Base image for sandbox containers (Debian + common CLI tools) |
+| `Dockerfile` | Base image for sandbox containers (Fedora + common CLI tools, compilers, Rust, Node) |
 | `requirements.txt` | Pinned Python dependencies |
 | `env.sh` | Creates `mcp-sandbox.env` and generates its signing key |
 | `install.sh` | Idempotent install/update: venv, image, systemd units |
@@ -93,7 +93,7 @@ reuses a label reaches the old container — but every result echoes
 
 | Setting | Default | Effect |
 |---|---|---|
-| `SANDBOX_IDLE` | 300 s | Recycle idle containers. Cleanup only: lowering it loses `apt` packages sooner, nothing else. |
+| `SANDBOX_IDLE` | 300 s | Recycle idle containers. Cleanup only: lowering it loses `dnf` packages sooner, nothing else. |
 | `SANDBOX_MAX` | 2 | Concurrent containers. Beyond it the least-recently-used **idle** container is evicted (`rm -f`; the volume stays, so files survive); when every sandbox is mid-command the call is refused instead of killing one. On a 4-core / 3.66 GiB host, `2 × 1 GiB` leaves ~1.6 GiB for nginx, the server and the system. |
 | `SANDBOX_MAX_TIMEOUT` | 900 s | Ceiling on the model's `timeout_seconds`. |
 | `SANDBOX_MIN_FREE` | 2 GiB | Refuse to start a sandbox when the volume filesystem is nearly full. Checked at container creation only — it will not stop a single large write. |
@@ -101,7 +101,7 @@ reuses a label reaches the old container — but every result echoes
 | `SANDBOX_IMAGE_MAX` | 1.5 MiB | Largest image that gets attached rather than linked. An attachment is also sent to the model (~2 MB ≈ 20k tokens). |
 | `--memory=1g --cpus=2 --pids-limit=256` | | Verified to land in the cgroup (`memory.max`, `cpu.max`, `pids.max`). |
 | `--init` | | Without an init as PID 1, exited children pile up as zombies against `--pids-limit` until `exec` starts failing. |
-| `bash -lc` | | `/bin/sh` is dash on Debian: no `[[ ]]`, no arrays, no `pipefail`. |
+| `bash -lc` | | Login shell, so `/etc/profile.d` is sourced — that is what puts `cargo` on PATH. |
 | `--security-opt=no-new-privileges` | | Keeps setuid binaries from being exploitable. |
 
 Volumes are never deleted by the server. `gc-volumes.sh` deletes them on a daily
@@ -147,8 +147,8 @@ rootless podman, cgroup v2, behind nginx):
 
 | Check | Result |
 |---|---|
-| Debian userland, tools present | ✅ trixie; `curl jq git rg fdfind ps less nano python3` |
-| Network + `apt install` | ✅ `sqlite3` installed and usable |
+| Fedora userland, tools present | ✅ Fedora 44; `curl jq git rg fd ps less python3 gcc cargo node` |
+| Network + `dnf install` | ✅ `sqlite` installed and usable |
 | Same label reuses container | ✅ same `hostname`, no `[new]` |
 | New label, fresh container | ✅ different `hostname`, empty `/workspace` |
 | Files survive recycling | ✅ marker file kept its old hostname after rebuild |
